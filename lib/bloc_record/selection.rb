@@ -2,37 +2,66 @@ require 'sqlite3'
 
 module Selection
   def find(*ids)
-    if ids.length == 1
+    original_ids = ids
+    ids = ids.map { |id| id.to_i }
+    ids.each { |id| ids.delete(id) unless id != 0 }
+    
+    if ids.length == 0
+      raise ArgumentError, "No valid id's provided."
+    elsif ids.length == 1
       find_one(ids.first)
     else
       rows = connection.execute <<-SQL
         SELECT #{columns.join ","} FROM #{table}
         WHERE id IN (#{ids.join(",")});
       SQL
-      
-      rows_to_array(rows)
+    
+      if rows.length == 0
+        raise ArgumentError, "No ids in #{original_ids.inspect} found"
+      else
+        rows_to_array(rows)
+      end
     end
   end
   
   def find_one(id)
+    raise ArgumentError, "id #{id} is not a valid input." unless id.to_i != 0
     row = connection.get_first_row <<-SQL
       SELECT #{columns.join ","} FROM #{table}
       WHERE id = #{id};
     SQL
     
-    init_object_from_row(row)
+    if row.length == 0
+      raise ArgumentError, "id #{id} not found."
+    else
+      init_object_from_row(row)
+    end
   end
   
   def find_by(attribute, value)
+    raise ArgumentError, "Attribute #{attribute} not found." unless columns.include?(attribute.to_s)
     row = connection.get_first_row <<-SQL
       SELECT #{columns.join ","} FROM #{table}
       WHERE #{attribute} = #{BlocRecord::Utility.sql_strings(value)};
     SQL
     
-    init_object_from_row(row)
+    if row.length == 0
+      raise ArgumentError, "Attribute '#{attribute}' with value '#{value}' not found."
+    else
+      init_object_from_row(row)
+    end
+  end
+  
+  def method_missing(method_name, *args, &block)
+    if method_name.to_s =~ /^find_by_(.*)/
+      find_by($1.to_sym, args.first)
+    else
+      super
+    end
   end
   
   def take(num=1)
+    raise ArgumentError, "Argument is not numeric." unless num.is_a? Numeric
     if num > 1
       rows = connection.execute <<-SQL
         SELECT #{columns.join ","} FROM #{table}
@@ -42,7 +71,7 @@ module Selection
       
       rows_to_array(rows)
     else
-      take_on
+      take_one
     end
   end
   
@@ -82,6 +111,22 @@ module Selection
     SQL
     
     rows_to_array(rows)
+  end
+  
+  def find_each(start:, batch_size:)
+    last_element = start + batch_size
+    item = start
+    while item < last_element
+      yield self.find_one(item)
+      item += 1
+    end
+  end
+  
+  def find_in_batches(start:, batch_size:)
+    last_element = start + batch_size
+    array = []
+    (start..last_element).each { |id| array << self.find_one(id) }
+    yield array
   end
   
   private
