@@ -123,9 +123,10 @@ module Selection
   end
   
   def find_in_batches(start:, batch_size:)
-    last_element = start + batch_size
-    array = []
-    (start..last_element).each { |id| array << self.find_one(id) }
+    rows = connection.execute <<-SQL
+    SELECT #{columns.join ","} FROM #{table} LIMIT #{batch_size} OFFSET #{start}
+    SQL
+    array = rows_to_array(rows)
     yield array
   end
   
