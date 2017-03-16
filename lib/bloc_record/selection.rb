@@ -144,10 +144,16 @@ module Selection
       end
     end
     
-    sql = <<-SQL
-      SELECT #{columns.join ","} FROM #{table}
-      WHERE #{expression};
-    SQL
+    if self.class == Array
+      sql = <<-SQL
+        #{self[1]} WHERE #{expression};
+      SQL
+    else
+      sql = <<-SQL
+        SELECT #{columns.join ","} FROM #{table}
+        WHERE #{expression};
+      SQL
+    end
     
     rows = connection.execute(sql, params)
     rows_to_array(rows)
@@ -155,8 +161,18 @@ module Selection
   
   def order(*args)
     if args.count > 1
+      args.each_with_index do |arg, index|
+        if arg.class == Hash
+          args[index] = arg.map { |key, value| "#{key} #{value}" }
+        end
+      end
       order = args.join(",")
     else
+      if args.first.class == Hash
+        array = []
+        args[0].each { |key, value| array << "#{key} #{value}" }
+        args[0] = array.join(",")
+      end
       order = args.first.to_s
     end
     rows = connection.execute <<-SQL
@@ -173,20 +189,34 @@ module Selection
         SELECT * FROM #{table} #{joins}
       SQL
     else
-      case args.first
-      when String
-        rows = connection.execute <<-SQL
-        SELECT * FROM #{table} #{BlocRecord::Utility.sql_strings(args.first)};
+      if args.first.class == Hash
+        join1, join2 = "", ""
+        args.first.each do |key, value|
+          join1 += "INNER JOIN #{key} ON #{key}.#{table}_id = #{table}.id"
+          join2 += "INNER JOIN #{value} ON #{value}.#{key}_id = #{key}.id"
+        end
+        sql = <<-SQL
+          SELECT * FROM #{table} #{join1} #{join2}
         SQL
-      when Symbol
-        rows = connection.execute <<-SQL
-        SELECT * FROM #{table}
-        INNER JOIN #{args.first} ON #{args.first}.#{table}_id = #{table}.id
-        SQL
+        rows = connection.execute(sql)
+      else
+        case args.first
+        when String
+          sql = <<-SQL
+          SELECT * FROM #{table} #{BlocRecord::Utility.sql_strings(args.first)};
+          SQL
+          rows = connection.execute(sql)
+        when Symbol
+          sql = <<-SQL
+          SELECT * FROM #{table}
+          INNER JOIN #{args.first} ON #{args.first}.#{table}_id = #{table}.id
+          SQL
+          rows = connection.execute(sql)
+        end
       end
     end
    
-    rows_to_array(rows)
+    return rows_to_array(rows), sql
   end
   
   private
