@@ -1,6 +1,22 @@
 require 'sqlite3'
 
 module Selection
+  class WhereChain
+    def initialize(scope)
+      @scope = scope
+    end
+    
+    def not(args)
+      puts "The args are #{args.inspect}"
+      puts "The scope is #{@scope}"
+      if args.class == Hash
+        string = "#{args.keys[0]} <> '#{args.values[0]}'"
+      end
+      puts "The string is #{string}"
+      @scope.where(string)
+    end
+  end
+  
   def find(*ids)
     original_ids = ids
     ids = ids.map { |id| id.to_i }
@@ -131,6 +147,10 @@ module Selection
   end
   
   def where(*args)
+    if args.count == 0
+      puts "I'M HERE!"
+      return WhereChain.new(self)
+    end
     if args.count > 1
       expression = args.shift
       params = args
@@ -154,6 +174,8 @@ module Selection
         WHERE #{expression};
       SQL
     end
+    puts "The expression is #{expression}"
+    puts "The SQL is #{sql}"
     
     rows = connection.execute(sql, params)
     rows_to_array(rows)

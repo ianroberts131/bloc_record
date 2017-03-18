@@ -27,6 +27,14 @@ module Persistence
     true
   end
   
+  def method_missing(method_name, *args, &block)
+    if method_name.to_s =~ /^update_(.*)/
+      self.class.update(self.id, { $1 => args.first })
+    else
+      super
+    end
+  end
+  
   def update_attribute(attribute, value)
     self.class.update(self.id, { attribute => value })
   end
@@ -58,22 +66,35 @@ module Persistence
     end
     
     def update(ids, updates)
-      updates = BlocRecord::Utility.convert_keys(updates)
-      updates.delete "id"
       
-      updates_array = updates.map { |key, value| "#{key}=#{BlocRecord::Utility.sql_strings(value)}" }
-      
-      if ids.class == Fixnum
-        where_clause = "WHERE id = #{ids};"
-      elsif ids.class == Array
-        where_clause = ids.empty? ? ";" : "WHERE id IN (#{ids.join(",")});"
+      if updates.class == Array
+        updates = updates.map { |hash| "'#{hash.keys[0]}'='#{hash.values[0]}'" }
+        updates_hash = Hash[updates.zip ids]
+        updates_array = updates_hash.map { |update, id| "UPDATE #{table} SET #{update} WHERE id = #{id};" }
+
+        connection.execute_batch <<-SQL
+          #{updates_array * " "}
+        SQL
       else
-        where_clause = ";"
+        updates = BlocRecord::Utility.convert_keys(updates)
+        
+        updates.delete "id"
+        
+        updates_array = updates.map { |key, value| "#{key}=#{BlocRecord::Utility.sql_strings(value)}" }
+        
+        if ids.class == Fixnum
+          where_clause = "WHERE id = #{ids};"
+        elsif ids.class == Array
+          where_clause = ids.empty? ? ";" : "WHERE id IN (#{ids.join(",")});"
+        else
+          where_clause = ";"
+        end
+      
+        connection.execute <<-SQL
+          UPDATE #{table}
+          SET #{updates_array * ","} #{where_clause}
+        SQL
       end
-      connection.execute <<-SQL
-        UPDATE #{table}
-        SET #{updates_array * ","} #{where_clause}
-      SQL
       
       true
     end
