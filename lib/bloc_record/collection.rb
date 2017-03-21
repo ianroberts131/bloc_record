@@ -7,6 +7,17 @@ module BlocRecord
       self.any? ? self.first.class.update(ids, updates) : false
     end
     
+    def destroy_all
+      ids = self.map(&:id)
+      if self.any?
+        ids.each do |id|
+          self.first.class.destroy(id)
+        end
+      else
+        false
+      end
+    end
+    
     def take(num=1)
       raise ArgumentError, "Argument is not numeric." unless num.is_a? Numeric
       raise ArgumentError, "Number must be greater than 0." unless num > 0
