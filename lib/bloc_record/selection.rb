@@ -7,12 +7,9 @@ module Selection
     end
     
     def not(args)
-      puts "The args are #{args.inspect}"
-      puts "The scope is #{@scope}"
       if args.class == Hash
         string = "#{args.keys[0]} <> '#{args.values[0]}'"
       end
-      puts "The string is #{string}"
       @scope.where(string)
     end
   end
@@ -148,7 +145,6 @@ module Selection
   
   def where(*args)
     if args.count == 0
-      puts "I'M HERE!"
       return WhereChain.new(self)
     end
     if args.count > 1
@@ -174,9 +170,6 @@ module Selection
         WHERE #{expression};
       SQL
     end
-    puts "The expression is #{expression}"
-    puts "The SQL is #{sql}"
-    
     rows = connection.execute(sql, params)
     rows_to_array(rows)
   end
